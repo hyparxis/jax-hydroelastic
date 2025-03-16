@@ -1,0 +1,14 @@
+[project]
+name = "jax-hydroelastic"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "jax>=0.5.2",
+    "matplotlib>=3.10.1",
+    "numpy>=2.2.3",
+    "numpy-stl>=3.2.0",
+    "pyqt5>=5.15.11",
+    "tetgen>=0.6.5",
+]
