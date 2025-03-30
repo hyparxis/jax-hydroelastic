@@ -10,5 +10,6 @@ dependencies = [
     "numpy>=2.2.3",
     "numpy-stl>=3.2.0",
     "pyqt5>=5.15.11",
+    "pyvista>=0.44.2",
     "tetgen>=0.6.5",
 ]

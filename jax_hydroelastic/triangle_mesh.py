@@ -1,7 +1,7 @@
 import jax
 import jax.numpy as jnp
 
-from mesh import Element, Mesh
+from jax_hydroelastic.mesh import Element, Mesh
 
 
 class Triangle(Element):

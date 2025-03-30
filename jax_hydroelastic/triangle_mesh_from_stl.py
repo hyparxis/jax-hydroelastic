@@ -2,7 +2,7 @@ import jax.numpy as jnp
 import numpy as np
 from stl import mesh
 
-from triangle_mesh import TriangleMesh
+from jax_hydroelastic.triangle_mesh import TriangleMesh
 
 
 def triangle_mesh_from_stl(stl_path: str) -> TriangleMesh:
