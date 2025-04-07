@@ -1,4 +1,5 @@
 import jax.numpy as jnp
+import jaxlie
 import numpy as np
 import pyvista as pv
 
@@ -41,8 +42,7 @@ def main():
         volume_mesh,
         0,  # triangle index
         0,  # tetrahedron index
-        rotation,
-        translation,
+        jaxlie.SE3.identity(),
     )
 
     print("intersection polygon:", intersection_polygon)

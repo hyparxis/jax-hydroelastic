@@ -1,10 +1,25 @@
-from typing import List
+from typing import List, NamedTuple, Tuple
 
 import jax
 import jax.numpy as jnp
+import jaxlie
 
 from jax_hydroelastic.triangle_mesh import TriangleMesh
 from jax_hydroelastic.volume_mesh import VolumeMesh
+
+
+class PlaneData(NamedTuple):
+    """Data for a plane defined by the implicit equation: `P(x⃗) = n̂⋅x⃗ - d = 0`"""
+
+    normal: jax.Array
+    displacement: jax.Array
+
+
+def signed_distance(plane: PlaneData, p: jax.Array) -> jax.Array:
+    """Return the signed distance from the plane to the point. Positive means the
+    point lies above the plane.
+    """
+    return jnp.dot(plane.normal, p) - plane.displacement
 
 
 class Plane:
@@ -25,17 +40,11 @@ class Plane:
         self.normal = normal
         self.displacement = jnp.dot(normal, point)
 
-    def signed_distance(self, p: jax.Array) -> jax.Array:
-        """Return the signed distance from the plane to the point. Positive means the
-        point lies above the plane.
-        """
-        return jnp.dot(self.normal, p) - self.displacement
-
 
 def intersect_line_with_plane(p_a: jax.Array, p_b: jax.Array, h: Plane) -> jax.Array:
     """Return the intersection point of a line segment with a plane."""
-    a = h.signed_distance(p_a)
-    b = h.signed_distance(p_b)
+    a = signed_distance(h, p_a)
+    b = signed_distance(h, p_b)
     wa = b / (b - a)
     wb = 1.0 - wa
     return wa * p_a + wb * p_b
@@ -60,8 +69,8 @@ def clip_polygon_by_halfspace(polygon: List[jax.Array], h: Plane) -> List[jax.Ar
         current_vertex = polygon[i]
         previous_vertex = polygon[i - 1]  # Automatically wraps to the last vertex
 
-        current_vertex_in_halfspace = h.signed_distance(current_vertex) <= 0.0
-        previous_vertex_in_halfspace = h.signed_distance(previous_vertex) <= 0.0
+        current_vertex_in_halfspace = signed_distance(h, current_vertex) <= 0.0
+        previous_vertex_in_halfspace = signed_distance(h, previous_vertex) <= 0.0
 
         # The edge is entirely inside the halfspace
         if current_vertex_in_halfspace and previous_vertex_in_halfspace:
@@ -95,13 +104,14 @@ def clip_triangle_by_tetrahedron(
     tetrahedral_mesh: VolumeMesh,
     triangle_index: int,
     tetrahedron_index: int,
-    rotation: jax.Array,
-    translation: jax.Array,
+    triangle_mesh_to_tetrahedral_mesh: jaxlie.SE3,
 ) -> jax.Array:
     """Clip a triangle by a tetrahedron."""
     triangle = triangle_mesh.get_element(triangle_index)
+    # Initialize the intersection polygon with the triangle vertices in the tetrahedron frame
     polygon = [
-        rotation @ triangle_mesh.get_vertex(i) + translation for i in triangle.indices
+        triangle_mesh_to_tetrahedral_mesh @ triangle_mesh.get_vertex(i)
+        for i in triangle.indices
     ]
 
     tetrahedron = tetrahedral_mesh.get_element(tetrahedron_index)
@@ -117,3 +127,81 @@ def clip_triangle_by_tetrahedron(
             return []
 
     return polygon
+
+
+def compute_polygon_centroid(polygon: List[jax.Array], normal: jax.Array) -> jax.Array:
+    n = len(polygon)
+
+    if n <= 3:
+        return sum(polygon) / n
+
+    # Decompose the polygon into a fan of triangles around the first vertex
+    total_weight = 0.0
+    v0 = polygon[0]
+    centroid = jnp.zeros(3)
+
+    for v1, v2 in zip(polygon[1:-1], polygon[2:]):
+        weight = jnp.dot(jnp.cross(v1 - v0, v2 - v0), normal)
+        centroid += weight * (v0 + v1 + v2) / 3
+        total_weight += weight
+
+    # If the polygon is degenerate, fall back to returning the average of the vertices
+    if abs(total_weight) < 1e-14:
+        return sum(polygon) / n
+    else:
+        centroid /= total_weight
+        return centroid
+
+
+def triangulate_polygon(
+    polygon: List[jax.Array],
+    normal: jax.Array,
+) -> Tuple[List[jax.Array], List[jax.Array]]:
+    n = len(polygon)
+    if n < 3:
+        return [], []
+
+    centroid = compute_polygon_centroid(polygon, normal)
+    centroid_index = n
+
+    vertices = polygon + [centroid]
+
+    triangles = []
+    for i in range(n):
+        # TODO: figure out why drake uses an n-triangle fan instead of the n-2 triangle fan here
+        triangle = jnp.array([centroid_index, i, i + 1])
+        triangles.append(triangle)
+
+    return triangles, vertices
+
+
+def sample_volume_field_on_surface(
+    triangle_mesh: TriangleMesh,
+    tetrahedral_mesh: VolumeMesh,
+    triangle_mesh_pose: jaxlie.SE3,
+    tetrahedral_mesh_pose: jaxlie.SE3,
+) -> None:
+    triangle_mesh_to_tetrahedral_mesh = (
+        tetrahedral_mesh_pose.inverse() @ triangle_mesh_pose
+    )
+
+    polygons = []
+    for tetrahedron_index in range(tetrahedral_mesh.num_elements()):
+        for triangle_index in range(triangle_mesh.num_elements()):
+            intersection_polygon = clip_triangle_by_tetrahedron(
+                triangle_mesh,
+                tetrahedral_mesh,
+                triangle_index,
+                tetrahedron_index,
+                triangle_mesh_to_tetrahedral_mesh,
+            )
+
+            if len(intersection_polygon) >= 3:
+                polygons.append(intersection_polygon)
+
+
+def compute_contact_surface(
+    triangle_mesh: TriangleMesh,
+    tetrahedral_mesh: VolumeMesh,
+):
+    pass
