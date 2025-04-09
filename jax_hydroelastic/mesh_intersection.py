@@ -166,10 +166,10 @@ def triangulate_polygon(
 
     vertices = polygon + [centroid]
 
+    # Iterate over consecutive vertices (edges) in the polygon
     triangles = []
     for i in range(n):
-        # TODO: figure out why drake uses an n-triangle fan instead of the n-2 triangle fan here
-        triangle = jnp.array([centroid_index, i, i + 1])
+        triangle = jnp.array([i, (i + 1) % n, centroid_index])
         triangles.append(triangle)
 
     return triangles, vertices
