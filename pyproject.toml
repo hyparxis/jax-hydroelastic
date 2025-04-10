@@ -5,8 +5,10 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "chex>=0.1.89",
     "jax>=0.5.2",
     "jaxlie>=1.4.2",
+    "jaxtyping>=0.3.1",
     "matplotlib>=3.10.1",
     "numpy>=2.2.3",
     "numpy-stl>=3.2.0",

@@ -17,7 +17,6 @@ def triangle_mesh_to_polydata(tri_mesh: TriangleMesh) -> pv.PolyData:
     # The leading '3' indicates the number of vertices in each face (triangle).
     faces = np.column_stack([np.full(triangles.shape[0], 3), triangles]).ravel()
 
-    # Create PolyData
     return pv.PolyData(vertices, faces)
 
 
@@ -39,5 +38,4 @@ def volume_mesh_to_unstructured_grid(vol_mesh: VolumeMesh) -> pv.UnstructuredGri
     # Cell types array: each cell is a VTK_TETRA = 10
     cell_types = np.full(num_tets, pv.CellType.TETRA, dtype=np.uint8)
 
-    # Create the UnstructuredGrid
     return pv.UnstructuredGrid(cells, cell_types, vertices)

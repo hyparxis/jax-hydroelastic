@@ -3,6 +3,7 @@ from typing import List, NamedTuple, Tuple
 import jax
 import jax.numpy as jnp
 import jaxlie
+from jaxtyping import Array, Float, Int
 
 from jax_hydroelastic.triangle_mesh import TriangleMesh
 from jax_hydroelastic.volume_mesh import VolumeMesh
@@ -15,7 +16,7 @@ class PlaneData(NamedTuple):
     displacement: jax.Array
 
 
-def signed_distance(plane: PlaneData, p: jax.Array) -> jax.Array:
+def signed_distance(plane: PlaneData, p: Float[Array, "3"]) -> jax.Array:
     """Return the signed distance from the plane to the point. Positive means the
     point lies above the plane.
     """
@@ -26,7 +27,10 @@ class Plane:
     """A plane defined by the implicit equation: `P(x⃗) = n̂⋅x⃗ - d = 0`"""
 
     def __init__(
-        self, normal: jax.Array, point: jax.Array, is_normalized: bool = False
+        self,
+        normal: Float[Array, "3"],
+        point: Float[Array, "3"],
+        is_normalized: bool = False,
     ):
         assert normal.shape == (3,)
         assert point.shape == (3,)
@@ -41,7 +45,9 @@ class Plane:
         self.displacement = jnp.dot(normal, point)
 
 
-def intersect_line_with_plane(p_a: jax.Array, p_b: jax.Array, h: Plane) -> jax.Array:
+def intersect_line_with_plane(
+    p_a: Float[Array, "3"], p_b: Float[Array, "3"], h: Plane
+) -> Float[Array, "3"]:
     """Return the intersection point of a line segment with a plane."""
     a = signed_distance(h, p_a)
     b = signed_distance(h, p_b)
@@ -50,10 +56,14 @@ def intersect_line_with_plane(p_a: jax.Array, p_b: jax.Array, h: Plane) -> jax.A
     return wa * p_a + wb * p_b
 
 
-def clip_polygon_by_halfspace(polygon: List[jax.Array], h: Plane) -> List[jax.Array]:
+def clip_polygon_by_halfspace(
+    polygon: List[Float[Array, "3"]], h: Plane
+) -> List[Float[Array, "3"]]:
     """Clip a polygon by a halfspace defined by a plane using the inner loop of the Sutherland-Hodgman algorithm."""
 
-    def add_unique_vertex(output_polygon: List[jax.Array], vertex: jax.Array) -> None:
+    def add_unique_vertex(
+        output_polygon: List[Float[Array, "3"]], vertex: Float[Array, "3"]
+    ) -> None:
         """Add a vertex to the polygon if it is not already present. This is done to avoid adding duplicate vertices due to numerical imprecision."""
 
         def near(a, b, eps=1e-14):
@@ -129,7 +139,9 @@ def clip_triangle_by_tetrahedron(
     return polygon
 
 
-def compute_polygon_centroid(polygon: List[jax.Array], normal: jax.Array) -> jax.Array:
+def compute_polygon_centroid(
+    polygon: List[Float[Array, "3"]], normal: Float[Array, "3"]
+) -> Float[Array, "3"]:
     n = len(polygon)
 
     if n <= 3:
@@ -156,7 +168,7 @@ def compute_polygon_centroid(polygon: List[jax.Array], normal: jax.Array) -> jax
 def triangulate_polygon(
     polygon: List[jax.Array],
     normal: jax.Array,
-) -> Tuple[List[jax.Array], List[jax.Array]]:
+) -> Tuple[List[Int[Array, "3"]], List[Float[Array, "3"]]]:
     n = len(polygon)
     if n < 3:
         return [], []

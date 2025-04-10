@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+from jaxtyping import Array, Float, Int
 
 from jax_hydroelastic.mesh import Element, Mesh
 
@@ -23,7 +24,11 @@ class VolumeMesh(Mesh):
 
     ElementType = Tetrahedron
 
-    def __init__(self, tetrahedra: jax.Array, vertices: jax.Array):
+    def __init__(
+        self,
+        tetrahedra: Int[Array, "num_elements 4"],
+        vertices: Float[Array, "num_vertices 3"],
+    ):
         assert vertices.shape[1] == 3
         assert len(vertices.shape) == 2
         assert vertices.dtype == jnp.float32
@@ -36,6 +41,6 @@ class VolumeMesh(Mesh):
         self.vertices = vertices
 
     def gradient_vector_of_linear_field(
-        self, field_value: jax.Array, element_index: int
+        self, field_value: Float[Array, "4"], element_index: int
     ) -> jax.Array:
         pass

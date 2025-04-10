@@ -2,6 +2,7 @@ from typing import Optional
 
 import jax
 import jax.numpy as jnp
+from jaxtyping import Array, Float, Int
 
 from jax_hydroelastic.mesh import Element, Mesh
 
@@ -31,9 +32,9 @@ class TriangleMesh(Mesh):
 
     def __init__(
         self,
-        triangles: jax.Array,
-        vertices: jax.Array,
-        face_normals: Optional[jax.Array] = None,
+        triangles: Int[Array, "num_elements 3"],
+        vertices: Float[Array, "num_vertices 3"],
+        face_normals: Optional[Float[Array, "num_elements 3"]] = None,
     ):
         assert vertices.shape[1] == 3
         assert len(vertices.shape) == 2
@@ -49,8 +50,8 @@ class TriangleMesh(Mesh):
         if face_normals is None:
 
             def compute_face_normal(
-                v0: jax.Array, v1: jax.Array, v2: jax.Array
-            ) -> jax.Array:
+                v0: Float[Array, "3"], v1: Float[Array, "3"], v2: Float[Array, "3"]
+            ) -> Float[Array, "3"]:
                 face_normal = jnp.cross(v1 - v0, v2 - v0)
                 norm = jnp.linalg.norm(face_normal)
                 norm_safe = jnp.maximum(norm, 1e-14)
@@ -74,6 +75,6 @@ class TriangleMesh(Mesh):
         return self.face_normals[index]
 
     def gradient_vector_of_linear_field(
-        self, field_value: jax.Array, element_index: int
+        self, field_value: Float[Array, "3"], element_index: int
     ) -> jax.Array:
         pass

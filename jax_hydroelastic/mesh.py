@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 from typing import Type
 
 import jax
+import jaxlie
+from jaxtyping import Array, Float
 
 
 class Element(ABC):
@@ -26,7 +28,7 @@ class Mesh(ABC):
 
     @abstractmethod
     def gradient_vector_of_linear_field(
-        self, field_value: jax.Array, element_index: int
+        self, field_value: Float[Array, "num_vertices_per_element"], element_index: int
     ) -> jax.Array:
         """Compute the gradient vector of a linear field defined on the mesh."""
         pass
@@ -43,10 +45,9 @@ class Mesh(ABC):
     def get_vertex(self, index: int) -> jax.Array:
         return self.vertices[index]
 
-    def transform(self, rotation: jax.Array, translation: jax.Array) -> None:
-        assert rotation.shape == (3, 3)
-        assert translation.shape == (3,)
-        self.vertices = jax.lax.batch_matmul(self.vertices, rotation) + translation
+    def transform(self, transformation: jaxlie.SE3) -> None:
+        # TODO: check this batch matmul works with jaxlie
+        self.vertices = transformation @ self.vertices
 
     def print(self) -> None:
         print("elements: ")
