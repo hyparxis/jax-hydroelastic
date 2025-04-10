@@ -3,7 +3,7 @@ from typing import Type
 
 import jax
 import jaxlie
-from jaxtyping import Array, Float
+from jaxtyping import Array, Float, Int
 
 
 class Element(ABC):
@@ -39,10 +39,10 @@ class Mesh(ABC):
     def num_vertices(self) -> int:
         return self.vertices.shape[0]
 
-    def get_element(self, index: int) -> Element:
+    def get_element(self, index: int | Int[Array, ""]) -> Element:
         return self.ElementType(self.elements[index])
 
-    def get_vertex(self, index: int) -> jax.Array:
+    def get_vertex(self, index: int | Int[Array, ""]) -> Float[Array, "3"]:
         return self.vertices[index]
 
     def transform(self, transformation: jaxlie.SE3) -> None:

@@ -10,7 +10,7 @@ from jax_hydroelastic.mesh import Element, Mesh
 class Triangle(Element):
     """Represents a triangle as 3 vertex indices."""
 
-    def __init__(self, indices: jax.Array):
+    def __init__(self, indices: Int[Array, "3"]):
         assert indices.size == 3
         assert indices.dtype == jnp.int32
 
@@ -70,11 +70,11 @@ class TriangleMesh(Mesh):
             assert face_normals.dtype == jnp.float32
             self.face_normals = face_normals
 
-    def face_normal(self, index: int) -> jax.Array:
+    def face_normal(self, index: int | Int[Array, ""]) -> Float[Array, "3"]:
         """Get the normal vector of a face."""
         return self.face_normals[index]
 
     def gradient_vector_of_linear_field(
-        self, field_value: Float[Array, "3"], element_index: int
+        self, field_value: Float[Array, "3"], element_index: Int[Array, ""]
     ) -> jax.Array:
         pass

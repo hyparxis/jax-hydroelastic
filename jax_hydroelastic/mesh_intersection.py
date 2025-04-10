@@ -12,41 +12,19 @@ from jax_hydroelastic.volume_mesh import VolumeMesh
 class PlaneData(NamedTuple):
     """Data for a plane defined by the implicit equation: `P(x⃗) = n̂⋅x⃗ - d = 0`"""
 
-    normal: jax.Array
-    displacement: jax.Array
+    normal: Float[Array, "3"]
+    displacement: Float[Array, ""]
 
 
-def signed_distance(plane: PlaneData, p: Float[Array, "3"]) -> jax.Array:
+def signed_distance(plane: PlaneData, p: Float[Array, "3"]) -> Float[Array, ""]:
     """Return the signed distance from the plane to the point. Positive means the
     point lies above the plane.
     """
     return jnp.dot(plane.normal, p) - plane.displacement
 
 
-class Plane:
-    """A plane defined by the implicit equation: `P(x⃗) = n̂⋅x⃗ - d = 0`"""
-
-    def __init__(
-        self,
-        normal: Float[Array, "3"],
-        point: Float[Array, "3"],
-        is_normalized: bool = False,
-    ):
-        assert normal.shape == (3,)
-        assert point.shape == (3,)
-
-        if not is_normalized:
-            magnitude = jnp.linalg.norm(normal)
-            assert magnitude > 1e-10
-
-            normal = jax.lax.div(normal, magnitude)
-
-        self.normal = normal
-        self.displacement = jnp.dot(normal, point)
-
-
 def intersect_line_with_plane(
-    p_a: Float[Array, "3"], p_b: Float[Array, "3"], h: Plane
+    p_a: Float[Array, "3"], p_b: Float[Array, "3"], h: PlaneData
 ) -> Float[Array, "3"]:
     """Return the intersection point of a line segment with a plane."""
     a = signed_distance(h, p_a)
@@ -57,7 +35,7 @@ def intersect_line_with_plane(
 
 
 def clip_polygon_by_halfspace(
-    polygon: List[Float[Array, "3"]], h: Plane
+    polygon: List[Float[Array, "3"]], h: PlaneData
 ) -> List[Float[Array, "3"]]:
     """Clip a polygon by a halfspace defined by a plane using the inner loop of the Sutherland-Hodgman algorithm."""
 
@@ -112,10 +90,10 @@ def clip_polygon_by_halfspace(
 def clip_triangle_by_tetrahedron(
     triangle_mesh: TriangleMesh,
     tetrahedral_mesh: VolumeMesh,
-    triangle_index: int,
-    tetrahedron_index: int,
+    triangle_index: int | Int[Array, ""],
+    tetrahedron_index: int | Int[Array, ""],
     triangle_mesh_to_tetrahedral_mesh: jaxlie.SE3,
-) -> jax.Array:
+) -> List[Float[Array, "3"]]:
     """Clip a triangle by a tetrahedron."""
     triangle = triangle_mesh.get_element(triangle_index)
     # Initialize the intersection polygon with the triangle vertices in the tetrahedron frame
@@ -131,7 +109,10 @@ def clip_triangle_by_tetrahedron(
     for face in faces:
         p_a, p_b, p_c = (tetrahedron_vertices[index] for index in face)
         face_normal = jnp.cross(p_b - p_a, p_c - p_a)
-        halfspace = Plane(face_normal, p_a)
+        face_normal /= jnp.linalg.norm(face_normal)
+        halfspace = PlaneData(
+            normal=face_normal, displacement=jnp.dot(face_normal, p_a)
+        )
         polygon = clip_polygon_by_halfspace(polygon, halfspace)
         if len(polygon) < 3:
             return []

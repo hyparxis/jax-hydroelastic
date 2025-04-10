@@ -3,17 +3,19 @@ import jax.numpy as jnp
 import jaxlie
 import numpy as np
 import pyvista as pv
+from jaxtyping import install_import_hook
 
-from jax_hydroelastic.mesh_intersection import (
-    clip_triangle_by_tetrahedron,
-    triangulate_polygon,
-)
-from jax_hydroelastic.pyvista_utils import (
-    triangle_mesh_to_polydata,
-    volume_mesh_to_unstructured_grid,
-)
-from jax_hydroelastic.triangle_mesh import TriangleMesh
-from jax_hydroelastic.volume_mesh import VolumeMesh
+with install_import_hook("jax_hydroelastic", "beartype.beartype"):
+    from jax_hydroelastic.mesh_intersection import (
+        clip_triangle_by_tetrahedron,
+        triangulate_polygon,
+    )
+    from jax_hydroelastic.pyvista_utils import (
+        triangle_mesh_to_polydata,
+        volume_mesh_to_unstructured_grid,
+    )
+    from jax_hydroelastic.triangle_mesh import TriangleMesh
+    from jax_hydroelastic.volume_mesh import VolumeMesh
 
 
 def main():
