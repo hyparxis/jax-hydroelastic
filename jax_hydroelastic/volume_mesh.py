@@ -13,6 +13,10 @@ class Tetrahedron(Element):
 
         self.indices = indices
 
+    @classmethod
+    def num_vertices(self) -> int:
+        return 4
+
 
 class VolumeMesh(Mesh):
     """Represents a volume mesh as a list of tetrahedra."""
@@ -30,3 +34,8 @@ class VolumeMesh(Mesh):
 
         self.elements = tetrahedra
         self.vertices = vertices
+
+    def gradient_vector_of_linear_field(
+        self, field_value: jax.Array, element_index: int
+    ) -> jax.Array:
+        pass

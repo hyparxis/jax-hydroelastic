@@ -1,4 +1,4 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import Type
 
 import jax
@@ -15,9 +15,21 @@ class Element(ABC):
     def print(self) -> None:
         print(self.indices)
 
+    @classmethod
+    @abstractmethod
+    def num_vertices(self) -> int:
+        pass
+
 
 class Mesh(ABC):
     ElementType: Type[Element]
+
+    @abstractmethod
+    def gradient_vector_of_linear_field(
+        self, field_value: jax.Array, element_index: int
+    ) -> jax.Array:
+        """Compute the gradient vector of a linear field defined on the mesh."""
+        pass
 
     def num_elements(self) -> int:
         return len(self.elements)

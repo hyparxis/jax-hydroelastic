@@ -95,7 +95,7 @@ def main():
         np.array(face_centroids),
         np.array(intersection_mesh.face_normals),
         mag=0.5,
-        color="red",
+        color="darkgreen",
     )
 
     plotter.show()

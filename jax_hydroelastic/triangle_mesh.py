@@ -15,6 +15,10 @@ class Triangle(Element):
 
         self.indices = indices
 
+    @classmethod
+    def num_vertices(self) -> int:
+        return 3
+
     def reverse_winding(self) -> None:
         """Reverse the winding order of the triangle."""
         self.flip_orientation()
@@ -68,3 +72,8 @@ class TriangleMesh(Mesh):
     def face_normal(self, index: int) -> jax.Array:
         """Get the normal vector of a face."""
         return self.face_normals[index]
+
+    def gradient_vector_of_linear_field(
+        self, field_value: jax.Array, element_index: int
+    ) -> jax.Array:
+        pass
