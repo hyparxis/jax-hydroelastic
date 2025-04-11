@@ -11,9 +11,6 @@ class Triangle(Element):
     """Represents a triangle as 3 vertex indices."""
 
     def __init__(self, indices: Int[Array, "3"]):
-        assert indices.size == 3
-        assert indices.dtype == jnp.int32
-
         self.indices = indices
 
     @classmethod
@@ -36,14 +33,6 @@ class TriangleMesh(Mesh):
         vertices: Float[Array, "num_vertices 3"],
         face_normals: Optional[Float[Array, "num_elements 3"]] = None,
     ):
-        assert vertices.shape[1] == 3
-        assert len(vertices.shape) == 2
-        assert vertices.dtype == jnp.float32
-
-        assert triangles.shape[1] == 3
-        assert len(triangles.shape) == 2
-        assert triangles.dtype == jnp.int32
-
         self.elements = triangles
         self.vertices = vertices
 
@@ -66,8 +55,6 @@ class TriangleMesh(Mesh):
                 vertices[triangles[:, 2]],
             )
         else:
-            assert face_normals.shape == triangles.shape
-            assert face_normals.dtype == jnp.float32
             self.face_normals = face_normals
 
     def face_normal(self, index: int | Int[Array, ""]) -> Float[Array, "3"]:
@@ -76,5 +63,24 @@ class TriangleMesh(Mesh):
 
     def gradient_vector_of_linear_field(
         self, field_value: Float[Array, "3"], element_index: Int[Array, ""]
-    ) -> jax.Array:
-        pass
+    ) -> Float[Array, "3"]:
+        g0 = field_value[0] * self._barycentric_gradient(element_index, 0)
+        g1 = field_value[1] * self._barycentric_gradient(element_index, 1)
+        g2 = field_value[2] * self._barycentric_gradient(element_index, 2)
+        return g0 + g1 + g2
+
+    def _barycentric_gradient(
+        self, e: int | Int[Array, ""], v: int | Int[Array, ""]
+    ) -> Float[Array, "3"]:
+        # TODO: handle small area case
+        v = self.vertices[self.triangles[e, v]]
+        a = self.vertices[self.triangles[e, (v + 1) % 3]]
+        b = self.vertices[self.triangles[e, (v + 2) % 3]]
+
+        # AB = B - A
+        ab = b - a
+        # AV = V - A
+        av = v - a
+
+        # AV - ( (AV · AB) / |AB|^2 ) * AB
+        return av - jnp.dot(av, ab) / jnp.dot(ab, ab) * ab

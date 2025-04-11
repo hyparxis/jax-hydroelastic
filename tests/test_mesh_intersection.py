@@ -18,6 +18,25 @@ with install_import_hook("jax_hydroelastic", "beartype.beartype"):
     from jax_hydroelastic.volume_mesh import VolumeMesh
 
 
+# TODO: move this to mesh_intersection
+def sample_pressure_field(polygon, field, element_index, normal):
+    if len(polygon) < 3:
+        return
+
+    triangles, vertices = triangulate_polygon(polygon, normal)
+
+    pressures = []
+    for vertex in vertices[:-1]:
+        pressures.append(field.value_at_cartesian_point(element_index, vertex))
+
+    bc = vertices[-1]
+    bn = vertices[0]
+    gradient_at_element = field.gradient_at_element(element_index)
+    pressures.apprend(gradient_at_element.dot(bc - bn) + pressures[0])
+
+    return triangles, vertices, pressures
+
+
 def main():
     tet_vertices = jnp.array(
         [

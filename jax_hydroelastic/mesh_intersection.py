@@ -1,6 +1,5 @@
 from typing import List, NamedTuple, Tuple
 
-import jax
 import jax.numpy as jnp
 import jaxlie
 from jaxtyping import Array, Float, Int
@@ -147,8 +146,8 @@ def compute_polygon_centroid(
 
 
 def triangulate_polygon(
-    polygon: List[jax.Array],
-    normal: jax.Array,
+    polygon: List[Float[Array, "3"]],
+    normal: Float[Array, "3"],
 ) -> Tuple[List[Int[Array, "3"]], List[Float[Array, "3"]]]:
     n = len(polygon)
     if n < 3:
