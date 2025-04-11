@@ -1,10 +1,17 @@
-from jax_hydroelastic.make_pressure_field import volume_mesh_to_surface_mesh
-from jax_hydroelastic.pyvista_utils import (
-    triangle_mesh_to_polydata,
-    volume_mesh_to_unstructured_grid,
-)
-from jax_hydroelastic.triangle_mesh_from_stl import triangle_mesh_from_stl
-from jax_hydroelastic.volume_mesh_from_stl import volume_mesh_from_stl
+import pyvista as pv
+from jaxtyping import install_import_hook
+
+with install_import_hook("jax_hydroelastic", "beartype.beartype"):
+    from jax_hydroelastic.make_pressure_field import (
+        make_pressure_field,
+        volume_mesh_to_surface_mesh,
+    )
+    from jax_hydroelastic.pyvista_utils import (
+        triangle_mesh_to_polydata,
+        volume_mesh_to_unstructured_grid,
+    )
+    from jax_hydroelastic.triangle_mesh_from_stl import triangle_mesh_from_stl
+    from jax_hydroelastic.volume_mesh_from_stl import volume_mesh_from_stl
 
 
 def visualize_volume_mesh() -> None:
@@ -42,8 +49,36 @@ def visualize_surface_mesh() -> None:
     surface_polydata.plot(show_edges=True)
 
 
+def visualize_pressure_field() -> None:
+    tet_mesh = volume_mesh_from_stl("tests/assets/sphere.stl")
+    grid = volume_mesh_to_unstructured_grid(tet_mesh)
+    pressures = make_pressure_field(tet_mesh, 100.0)
+    grid.point_data["pressures"] = pressures
+
+    # get cell centroids
+    cells = grid.cells.reshape(-1, 5)[:, 1:]
+    cell_center = grid.points[cells].mean(1)
+
+    # extract cells below the 0 xy plane
+    mask = cell_center[:, 2] < 0
+    cell_ind = mask.nonzero()[0]
+    subgrid = grid.extract_cells(cell_ind)
+
+    plotter = pv.Plotter()
+    plotter.add_mesh(
+        subgrid,
+        scalars="pressures",
+        cmap="coolwarm",
+        # opacity=0.75,
+        # show_edges=True,
+        lighting=True,
+        smooth_shading=False,
+    )
+    plotter.show()
+
+
 def main():
-    visualize_surface_mesh()
+    visualize_pressure_field()
 
 
 if __name__ == "__main__":
