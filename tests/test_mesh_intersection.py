@@ -1,11 +1,10 @@
-import jax
 import jax.numpy as jnp
 import jaxlie
-import numpy as np
 import pyvista as pv
 from jaxtyping import install_import_hook
 
 with install_import_hook("jax_hydroelastic", "beartype.beartype"):
+    from jax_hydroelastic.linear_mesh_field import LinearMeshField
     from jax_hydroelastic.mesh_intersection import (
         clip_triangle_by_tetrahedron,
         triangulate_polygon,
@@ -32,7 +31,7 @@ def sample_pressure_field(polygon, field, element_index, normal):
     bc = vertices[-1]
     bn = vertices[0]
     gradient_at_element = field.gradient_at_element(element_index)
-    pressures.apprend(gradient_at_element.dot(bc - bn) + pressures[0])
+    pressures.append(gradient_at_element.dot(bc - bn) + pressures[0])
 
     return triangles, vertices, pressures
 
@@ -67,57 +66,78 @@ def main():
         jaxlie.SE3.identity(),
     )
 
+    pressures = jnp.array([0.0, 10.0, 0.0, 10.0])
+    mesh_field = LinearMeshField(
+        volume_mesh,
+        pressures,
+    )
+
     print("intersection polygon:", intersection_polygon)
 
     plotter = pv.Plotter()
 
     # Plot the tetrahedron
     tetrahedron_grid = volume_mesh_to_unstructured_grid(volume_mesh)
-    plotter.add_mesh(tetrahedron_grid, style="wireframe")
+    tetrahedron_grid.point_data["pressures"] = pressures
+    plotter.add_mesh(tetrahedron_grid, style="wireframe", cmap="coolwarm")
+
+    # # Plot tetrahedron indices
+    # point_ids = np.arange(tetrahedron_grid.n_points)
+    # plotter.add_point_labels(tetrahedron_grid.points, point_ids)
 
     # Plot the triangle
     triangle_polydata = triangle_mesh_to_polydata(triangle_mesh)
     plotter.add_mesh(triangle_polydata, style="wireframe", show_edges=True)
 
     # Plot the intersection polygon surface
-    if len(intersection_polygon) >= 3:
-        poly_np = np.array(intersection_polygon)
-        N = len(poly_np)
-        faces = [N] + list(range(N))
-        intersection_polydata = pv.PolyData(poly_np, faces)
-        plotter.add_mesh(intersection_polydata, color="green")
+    # if len(intersection_polygon) >= 3:
+    #     poly_np = np.array(intersection_polygon)
+    #     N = len(poly_np)
+    #     faces = [N] + list(range(N))
+    #     intersection_polydata = pv.PolyData(poly_np, faces)
+    #     plotter.add_mesh(intersection_polydata, color="green")
 
     # Plot the triangulated intersection mesh
     intersection_triangles, intersection_vertices = triangulate_polygon(
         intersection_polygon, triangle_mesh.face_normal(0)
     )
 
+    # Plot the pressure gradient
+    intersection_triangles, intersection_vertices, intersection_pressures = (
+        sample_pressure_field(
+            intersection_polygon, mesh_field, 0, triangle_mesh.face_normals[0]
+        )
+    )
+
     intersection_mesh = TriangleMesh(
         jnp.stack(intersection_triangles), jnp.stack(intersection_vertices)
     )
     intersection_polydata = triangle_mesh_to_polydata(intersection_mesh)
-    plotter.add_mesh(intersection_polydata, style="wireframe", show_edges=True)
-
+    intersection_polydata.point_data["_pressures"] = intersection_pressures
+    plotter.add_mesh(
+        intersection_polydata, show_edges=True, cmap="coolwarm", edge_color="darkblue"
+    )
+    plotter.add_mesh(intersection_polydata.contour())
     # Plot the normals
-    face_centroids = jax.vmap(
-        lambda i0, i1, i2: (
-            intersection_mesh.vertices[i0]
-            + intersection_mesh.vertices[i1]
-            + intersection_mesh.vertices[i2]
-        )
-        / 3
-    )(
-        intersection_mesh.elements[:, 0],
-        intersection_mesh.elements[:, 1],
-        intersection_mesh.elements[:, 2],
-    )
+    # face_centroids = jax.vmap(
+    #     lambda i0, i1, i2: (
+    #         intersection_mesh.vertices[i0]
+    #         + intersection_mesh.vertices[i1]
+    #         + intersection_mesh.vertices[i2]
+    #     )
+    #     / 3
+    # )(
+    #     intersection_mesh.elements[:, 0],
+    #     intersection_mesh.elements[:, 1],
+    #     intersection_mesh.elements[:, 2],
+    # )
 
-    plotter.add_arrows(
-        np.array(face_centroids),
-        np.array(intersection_mesh.face_normals),
-        mag=0.5,
-        color="darkgreen",
-    )
+    # plotter.add_arrows(
+    #     np.array(face_centroids),
+    #     np.array(intersection_mesh.face_normals),
+    #     mag=0.5,
+    #     color="darkgreen",
+    # )
 
     plotter.show()
 

@@ -60,9 +60,9 @@ class TriangleMesh(Mesh):
         self, e: int | Int[Array, ""], v: int | Int[Array, ""]
     ) -> Float[Array, "3"]:
         # TODO: handle small area case
-        v = self.vertices[self.triangles[e, v]]
-        a = self.vertices[self.triangles[e, (v + 1) % 3]]
-        b = self.vertices[self.triangles[e, (v + 2) % 3]]
+        v = self.vertices[self.elements[e, v]]
+        a = self.vertices[self.elements[e, (v + 1) % 3]]
+        b = self.vertices[self.elements[e, (v + 2) % 3]]
 
         # AB = B - A
         ab = b - a

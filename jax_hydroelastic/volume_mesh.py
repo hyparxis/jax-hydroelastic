@@ -21,7 +21,7 @@ class VolumeMesh(Mesh):
         return 4
 
     def gradient_vector_of_linear_field(
-        self, field_value: Float[Array, "4"], element_index: int
+        self, field_value: Float[Array, "4"], element_index: int | Int[Array, ""]
     ) -> jax.Array:
         g0 = field_value[0] * self._barycentric_gradient(element_index, 0)
         g1 = field_value[1] * self._barycentric_gradient(element_index, 1)
@@ -32,16 +32,16 @@ class VolumeMesh(Mesh):
     def _barycentric_gradient(
         self, e: int | Int[Array, ""], v: int | Int[Array, ""]
     ) -> Float[Array, "3"]:
-        v = self.vertices[self.triangles[e, v]]
-        a = self.vertices[self.triangles[e, (v + 1) % 4]]
-        b = self.vertices[self.triangles[e, (v + 2) % 4]]
-        c = self.vertices[self.triangles[e, (v + 3) % 4]]
+        V = self.vertices[self.elements[e, v]]
+        A = self.vertices[self.elements[e, (v + 1) % 4]]
+        B = self.vertices[self.elements[e, (v + 2) % 4]]
+        C = self.vertices[self.elements[e, (v + 3) % 4]]
 
-        ab = a - b
-        ac = a - c
-        av = a - v
+        AB = A - B
+        AC = A - C
+        AV = A - V
 
-        area_vector = jnp.cross(ab, ac)
-        signed_volume = jnp.dot(area_vector, av)
+        area_vector = jnp.cross(AB, AC)
+        signed_volume = jnp.dot(area_vector, AV)
 
         return area_vector / signed_volume

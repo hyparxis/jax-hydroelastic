@@ -11,7 +11,7 @@ class LinearMeshField:
     def __init__(
         self,
         mesh: Mesh,
-        values: Float[Array, "num_elements num_vertices_per_element"],
+        values: Float[Array, "num_vertices"],
         gradients: Optional[Float[Array, "num_elements 3"]] = None,
     ):
         self.mesh = mesh
@@ -39,13 +39,13 @@ class LinearMeshField:
         self,
         element_index: int | Int[Array, ""],
         barycentric_coordinates: Float[Array, "num_vertices_per_element"],
-    ) -> float:
+    ) -> Float[Array, ""]:
         indices = self.mesh.elements[element_index]
         return jnp.sum(self.values[indices] * barycentric_coordinates)
 
     def value_at_cartesian_point(
         self, element_index: int | Int[Array, ""], point: Float[Array, "3"]
-    ) -> float:
+    ) -> Float[Array, ""]:
         return (
             self.gradients[element_index].dot(point)
             + self.values_at_origin[element_index]
@@ -58,7 +58,7 @@ class LinearMeshField:
 
     def _compute_value_at_origin(
         self, element_index: int | Int[Array, ""]
-    ) -> Float[Array, "num_vertices_per_element"]:
+    ) -> Float[Array, ""]:
         indices = self.mesh.elements[element_index]
         v0_index = indices[0]
         v0 = self.mesh.vertices[v0_index]

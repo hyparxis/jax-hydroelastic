@@ -35,7 +35,7 @@ def volume_mesh_to_unstructured_grid(vol_mesh: VolumeMesh) -> pv.UnstructuredGri
     # where '4' is the number of points in a tetrahedron.
     cells = np.column_stack([np.full(num_tets, 4), tetrahedra]).ravel()
 
-    # Cell types array: each cell is a VTK_TETRA = 10
+    # Cell types array: each cell is a VTK_TETRA
     cell_types = np.full(num_tets, pv.CellType.TETRA, dtype=np.uint8)
 
     return pv.UnstructuredGrid(cells, cell_types, vertices)
