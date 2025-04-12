@@ -4,28 +4,11 @@ import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float, Int
 
-from jax_hydroelastic.mesh import Element, Mesh
-
-
-class Triangle(Element):
-    """Represents a triangle as 3 vertex indices."""
-
-    def __init__(self, indices: Int[Array, "3"]):
-        self.indices = indices
-
-    @classmethod
-    def num_vertices(self) -> int:
-        return 3
-
-    def reverse_winding(self) -> None:
-        """Reverse the winding order of the triangle."""
-        self.flip_orientation()
+from jax_hydroelastic.mesh import Mesh
 
 
 class TriangleMesh(Mesh):
     """Represents a triangle mesh as a list of triangles."""
-
-    ElementType = Triangle
 
     def __init__(
         self,
@@ -56,6 +39,10 @@ class TriangleMesh(Mesh):
             )
         else:
             self.face_normals = face_normals
+
+    @classmethod
+    def num_vertices_per_element(cls) -> int:
+        return 3
 
     def face_normal(self, index: int | Int[Array, ""]) -> Float[Array, "3"]:
         """Get the normal vector of a face."""

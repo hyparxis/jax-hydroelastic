@@ -1,30 +1,27 @@
 from abc import ABC, abstractmethod
-from typing import Type
 
 import jax
+import jax.numpy as jnp
 import jaxlie
 from jaxtyping import Array, Float, Int
 
 
-class Element(ABC):
-    def flip_orientation(self) -> None:
-        """Flip the orientation of the tetrahedron or triangle."""
+def reverse_triangle_winding(indices: Int[Array, "3"]) -> Int[Array, "3"]:
+    """Reverse the winding order of a triangle."""
+    return jnp.array([indices[1], indices[0], indices[2]])
 
-        # You can flip the orientation of a tetrahedron or winding order of a triangle
-        # by swapping the first two indices.
-        self.indices[0], self.indices[1] = self.indices[1], self.indices[0]
 
-    def print(self) -> None:
-        print(self.indices)
-
-    @classmethod
-    @abstractmethod
-    def num_vertices(self) -> int:
-        pass
+def flip_tetrahedron_orientation(indices: Int[Array, "4"]) -> Int[Array, "4"]:
+    """Flip the orientation of a tetrahedron."""
+    return jnp.array([indices[1], indices[0], indices[2], indices[3]])
 
 
 class Mesh(ABC):
-    ElementType: Type[Element]
+    @classmethod
+    @abstractmethod
+    def num_vertices_per_element(cls) -> int:
+        """Return the number of vertices per element."""
+        pass
 
     @abstractmethod
     def gradient_vector_of_linear_field(
@@ -34,16 +31,10 @@ class Mesh(ABC):
         pass
 
     def num_elements(self) -> int:
-        return len(self.elements)
+        return self.elements.shape[0]
 
     def num_vertices(self) -> int:
         return self.vertices.shape[0]
-
-    def get_element(self, index: int | Int[Array, ""]) -> Element:
-        return self.ElementType(self.elements[index])
-
-    def get_vertex(self, index: int | Int[Array, ""]) -> Float[Array, "3"]:
-        return self.vertices[index]
 
     def transform(self, transformation: jaxlie.SE3) -> None:
         # TODO: check this batch matmul works with jaxlie
@@ -52,6 +43,6 @@ class Mesh(ABC):
     def print(self) -> None:
         print("elements: ")
         for element in self.elements:
-            self.ElementType(element).print()
+            print(element)
         print("vertices: ")
         print(self.vertices)

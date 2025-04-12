@@ -20,7 +20,7 @@ class LinearMeshField:
         if gradients is not None:
             assert gradients.shape == (
                 mesh.num_elements(),
-                mesh.ElementType.num_vertices(),
+                mesh.num_vertices_per_element(),
             )
             self.gradients = gradients
         else:

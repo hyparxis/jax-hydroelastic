@@ -2,24 +2,11 @@ import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float, Int
 
-from jax_hydroelastic.mesh import Element, Mesh
-
-
-class Tetrahedron(Element):
-    """Represents a tetrahedron as 4 vertex indices."""
-
-    def __init__(self, indices: Int[Array, "4"]):
-        self.indices = indices
-
-    @classmethod
-    def num_vertices(self) -> int:
-        return 4
+from jax_hydroelastic.mesh import Mesh
 
 
 class VolumeMesh(Mesh):
     """Represents a volume mesh as a list of tetrahedra."""
-
-    ElementType = Tetrahedron
 
     def __init__(
         self,
@@ -28,6 +15,10 @@ class VolumeMesh(Mesh):
     ):
         self.elements = tetrahedra
         self.vertices = vertices
+
+    @classmethod
+    def num_vertices_per_element(cls) -> int:
+        return 4
 
     def gradient_vector_of_linear_field(
         self, field_value: Float[Array, "4"], element_index: int

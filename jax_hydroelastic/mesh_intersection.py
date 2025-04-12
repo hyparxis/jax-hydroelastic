@@ -1,5 +1,6 @@
-from typing import List, NamedTuple, Tuple
+from typing import List, Tuple
 
+import chex
 import jax.numpy as jnp
 import jaxlie
 from jaxtyping import Array, Float, Int
@@ -8,7 +9,8 @@ from jax_hydroelastic.triangle_mesh import TriangleMesh
 from jax_hydroelastic.volume_mesh import VolumeMesh
 
 
-class PlaneData(NamedTuple):
+@chex.dataclass
+class PlaneData:
     """Data for a plane defined by the implicit equation: `P(x⃗) = n̂⋅x⃗ - d = 0`"""
 
     normal: Float[Array, "3"]
@@ -91,18 +93,18 @@ def clip_triangle_by_tetrahedron(
     tetrahedral_mesh: VolumeMesh,
     triangle_index: int | Int[Array, ""],
     tetrahedron_index: int | Int[Array, ""],
-    triangle_mesh_to_tetrahedral_mesh: jaxlie.SE3,
+    triangle_frame_to_tetrahedron_frame: jaxlie.SE3,
 ) -> List[Float[Array, "3"]]:
     """Clip a triangle by a tetrahedron."""
-    triangle = triangle_mesh.get_element(triangle_index)
+    triangle = triangle_mesh.elements[triangle_index]
     # Initialize the intersection polygon with the triangle vertices in the tetrahedron frame
     polygon = [
-        triangle_mesh_to_tetrahedral_mesh @ triangle_mesh.get_vertex(i)
-        for i in triangle.indices
+        triangle_frame_to_tetrahedron_frame @ triangle_mesh.vertices[i]
+        for i in triangle
     ]
 
-    tetrahedron = tetrahedral_mesh.get_element(tetrahedron_index)
-    tetrahedron_vertices = [tetrahedral_mesh.get_vertex(i) for i in tetrahedron.indices]
+    tetrahedron = tetrahedral_mesh.elements[tetrahedron_index]
+    tetrahedron_vertices = tetrahedral_mesh.vertices[tetrahedron]
 
     faces = [[1, 2, 3], [0, 3, 2], [0, 1, 3], [0, 2, 1]]
     for face in faces:
