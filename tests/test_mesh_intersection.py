@@ -18,6 +18,7 @@ with install_import_hook("jax_hydroelastic", "beartype.beartype"):
 
 
 # TODO: move this to mesh_intersection
+# @jax.jit
 def sample_pressure_field(polygon, field, element_index, normal):
     if len(polygon) < 3:
         return
@@ -46,7 +47,7 @@ def main():
         ]
     )
     tet_elements = jnp.array([0, 1, 2, 3]).reshape(1, 4)
-    volume_mesh = VolumeMesh(tet_elements, tet_vertices)
+    volume_mesh = VolumeMesh(elements=tet_elements, vertices=tet_vertices)
 
     tri_vertices = jnp.array(
         [
@@ -67,7 +68,7 @@ def main():
     )
 
     pressures = jnp.array([0.0, 10.0, 0.0, 10.0])
-    mesh_field = LinearMeshField(
+    mesh_field = LinearMeshField.create(
         volume_mesh,
         pressures,
     )
@@ -138,6 +139,8 @@ def main():
     #     mag=0.5,
     #     color="darkgreen",
     # )
+
+    # plotter.export_vtksz("tri_tet_intersection.vtksz")
 
     plotter.show()
 

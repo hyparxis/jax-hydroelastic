@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+import chex
 import jax
 import jax.numpy as jnp
 import jaxlie
@@ -16,7 +17,11 @@ def flip_tetrahedron_orientation(indices: Int[Array, "4"]) -> Int[Array, "4"]:
     return jnp.array([indices[1], indices[0], indices[2], indices[3]])
 
 
+@chex.dataclass
 class Mesh(ABC):
+    elements: Int[Array, "num_elements num_vertices_per_element"]
+    vertices: Float[Array, "num_vertices 3"]
+
     @classmethod
     @abstractmethod
     def num_vertices_per_element(cls) -> int:
@@ -38,7 +43,7 @@ class Mesh(ABC):
 
     def transform(self, transformation: jaxlie.SE3) -> None:
         # TODO: check this batch matmul works with jaxlie
-        self.vertices = transformation @ self.vertices
+        return self.replace(vertices=(transformation @ self.vertices))
 
     def print(self) -> None:
         print("elements: ")

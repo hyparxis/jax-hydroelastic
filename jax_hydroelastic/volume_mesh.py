@@ -1,3 +1,4 @@
+import chex
 import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float, Int
@@ -5,16 +6,11 @@ from jaxtyping import Array, Float, Int
 from jax_hydroelastic.mesh import Mesh
 
 
+@chex.dataclass
 class VolumeMesh(Mesh):
     """Represents a volume mesh as a list of tetrahedra."""
 
-    def __init__(
-        self,
-        tetrahedra: Int[Array, "num_elements 4"],
-        vertices: Float[Array, "num_vertices 3"],
-    ):
-        self.elements = tetrahedra
-        self.vertices = vertices
+    elements: Int[Array, "num_elements 4"]
 
     @classmethod
     def num_vertices_per_element(cls) -> int:
