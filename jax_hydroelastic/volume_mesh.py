@@ -13,6 +13,18 @@ class VolumeMesh(Mesh):
     elements: Int[Array, "num_elements 4"]
 
     @classmethod
+    def create(
+        cls,
+        tetrahedra: Int[Array, "num_elements 4"],
+        vertices: Float[Array, "num_vertices 3"],
+    ):
+        """Trivial class method to keep a consistent interface with TriangleMesh."""
+        return cls(
+            elements=tetrahedra,
+            vertices=vertices,
+        )
+
+    @classmethod
     def num_vertices_per_element(cls) -> int:
         return 4
 
@@ -33,9 +45,9 @@ class VolumeMesh(Mesh):
         B = self.vertices[self.elements[e, (v + 2) % 4]]
         C = self.vertices[self.elements[e, (v + 3) % 4]]
 
-        AB = A - B
-        AC = A - C
-        AV = A - V
+        AV = V - A
+        AB = B - A
+        AC = C - A
 
         area_vector = jnp.cross(AB, AC)
         signed_volume = jnp.dot(area_vector, AV)

@@ -1,6 +1,7 @@
 from typing import List, Tuple
 
 import chex
+import jax
 import jax.numpy as jnp
 import jaxlie
 from jaxtyping import Array, Float, Int
@@ -17,6 +18,7 @@ class PlaneData:
     displacement: Float[Array, ""]
 
 
+@jax.jit
 def signed_distance(plane: PlaneData, p: Float[Array, "3"]) -> Float[Array, ""]:
     """Return the signed distance from the plane to the point. Positive means the
     point lies above the plane.
@@ -132,19 +134,18 @@ def compute_polygon_centroid(
     # Decompose the polygon into a fan of triangles around the first vertex
     total_weight = 0.0
     v0 = polygon[0]
-    centroid = jnp.zeros(3)
+    weighted_sum = jnp.zeros(3)
 
     for v1, v2 in zip(polygon[1:-1], polygon[2:]):
         weight = jnp.dot(jnp.cross(v1 - v0, v2 - v0), normal)
-        centroid += weight * (v0 + v1 + v2) / 3
+        weighted_sum += weight * (v0 + v1 + v2) / 3
         total_weight += weight
 
     # If the polygon is degenerate, fall back to returning the average of the vertices
     if abs(total_weight) < 1e-14:
         return sum(polygon) / n
     else:
-        centroid /= total_weight
-        return centroid
+        return weighted_sum / total_weight
 
 
 def triangulate_polygon(

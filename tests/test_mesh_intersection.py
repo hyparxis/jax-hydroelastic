@@ -1,5 +1,6 @@
 import jax.numpy as jnp
 import jaxlie
+import numpy as np
 import pyvista as pv
 from jaxtyping import install_import_hook
 
@@ -47,7 +48,7 @@ def main():
         ]
     )
     tet_elements = jnp.array([0, 1, 2, 3]).reshape(1, 4)
-    volume_mesh = VolumeMesh(elements=tet_elements, vertices=tet_vertices)
+    volume_mesh = VolumeMesh.create(tet_elements, tet_vertices)
 
     tri_vertices = jnp.array(
         [
@@ -57,7 +58,7 @@ def main():
         ]
     )
     tri_elements = jnp.array([0, 1, 2]).reshape(1, 3)
-    triangle_mesh = TriangleMesh(tri_elements, tri_vertices)
+    triangle_mesh = TriangleMesh.create(tri_elements, tri_vertices)
 
     intersection_polygon = clip_triangle_by_tetrahedron(
         triangle_mesh,
@@ -67,7 +68,7 @@ def main():
         jaxlie.SE3.identity(),
     )
 
-    pressures = jnp.array([0.0, 10.0, 0.0, 10.0])
+    pressures = jnp.array([10.0, 0.0, 10.0, 0.0])
     mesh_field = LinearMeshField.create(
         volume_mesh,
         pressures,
@@ -80,11 +81,11 @@ def main():
     # Plot the tetrahedron
     tetrahedron_grid = volume_mesh_to_unstructured_grid(volume_mesh)
     tetrahedron_grid.point_data["pressures"] = pressures
-    plotter.add_mesh(tetrahedron_grid, style="wireframe", cmap="coolwarm")
+    plotter.add_mesh(tetrahedron_grid, opacity=0.25, cmap="coolwarm")
 
     # # Plot tetrahedron indices
-    # point_ids = np.arange(tetrahedron_grid.n_points)
-    # plotter.add_point_labels(tetrahedron_grid.points, point_ids)
+    point_ids = np.arange(tetrahedron_grid.n_points)
+    plotter.add_point_labels(tetrahedron_grid.points, point_ids)
 
     # Plot the triangle
     triangle_polydata = triangle_mesh_to_polydata(triangle_mesh)
@@ -110,7 +111,7 @@ def main():
         )
     )
 
-    intersection_mesh = TriangleMesh(
+    intersection_mesh = TriangleMesh.create(
         jnp.stack(intersection_triangles), jnp.stack(intersection_vertices)
     )
     intersection_polydata = triangle_mesh_to_polydata(intersection_mesh)

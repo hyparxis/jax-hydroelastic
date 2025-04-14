@@ -1,5 +1,6 @@
 from typing import Optional
 
+import chex
 import jax
 import jax.numpy as jnp
 from jaxtyping import Array, Float, Int
@@ -7,21 +8,23 @@ from jaxtyping import Array, Float, Int
 from jax_hydroelastic.mesh import Mesh
 
 
+@chex.dataclass
 class TriangleMesh(Mesh):
     """Represents a triangle mesh as a list of triangles."""
 
-    def __init__(
-        self,
+    elements: Int[Array, "num_elements 3"]
+    face_normals: Float[Array, "num_elements 3"]
+
+    @classmethod
+    def create(
+        cls,
         triangles: Int[Array, "num_elements 3"],
         vertices: Float[Array, "num_vertices 3"],
         face_normals: Optional[Float[Array, "num_elements 3"]] = None,
     ):
-        self.elements = triangles
-        self.vertices = vertices
-
         if face_normals is None:
 
-            def compute_face_normal(
+            def _compute_face_normal(
                 v0: Float[Array, "3"], v1: Float[Array, "3"], v2: Float[Array, "3"]
             ) -> Float[Array, "3"]:
                 face_normal = jnp.cross(v1 - v0, v2 - v0)
@@ -29,16 +32,19 @@ class TriangleMesh(Mesh):
                 norm_safe = jnp.maximum(norm, 1e-14)
                 return face_normal / norm_safe
 
-            self.face_normals = jax.vmap(
-                compute_face_normal,
+            face_normals = jax.vmap(
+                _compute_face_normal,
                 in_axes=(0, 0, 0),
             )(
                 vertices[triangles[:, 0]],
                 vertices[triangles[:, 1]],
                 vertices[triangles[:, 2]],
             )
-        else:
-            self.face_normals = face_normals
+        return cls(
+            elements=triangles,
+            vertices=vertices,
+            face_normals=face_normals,
+        )
 
     @classmethod
     def num_vertices_per_element(cls) -> int:
@@ -60,14 +66,12 @@ class TriangleMesh(Mesh):
         self, e: int | Int[Array, ""], v: int | Int[Array, ""]
     ) -> Float[Array, "3"]:
         # TODO: handle small area case
-        v = self.vertices[self.elements[e, v]]
-        a = self.vertices[self.elements[e, (v + 1) % 3]]
-        b = self.vertices[self.elements[e, (v + 2) % 3]]
+        V = self.vertices[self.elements[e, v]]
+        A = self.vertices[self.elements[e, (v + 1) % 3]]
+        B = self.vertices[self.elements[e, (v + 2) % 3]]
 
-        # AB = B - A
-        ab = b - a
-        # AV = V - A
-        av = v - a
+        AB = B - A
+        AV = V - A
 
         # AV - ( (AV · AB) / |AB|^2 ) * AB
-        return av - jnp.dot(av, ab) / jnp.dot(ab, ab) * ab
+        return AV - jnp.dot(AV, AB) / jnp.dot(AB, AB) * AB
