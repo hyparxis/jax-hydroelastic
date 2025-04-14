@@ -8,6 +8,7 @@ with install_import_hook("jax_hydroelastic", "beartype.beartype"):
     from jax_hydroelastic.linear_mesh_field import LinearMeshField
     from jax_hydroelastic.mesh_intersection import (
         clip_triangle_by_tetrahedron,
+        sample_pressure_field_on_polygon,
         triangulate_polygon,
     )
     from jax_hydroelastic.pyvista_utils import (
@@ -20,22 +21,6 @@ with install_import_hook("jax_hydroelastic", "beartype.beartype"):
 
 # TODO: move this to mesh_intersection
 # @jax.jit
-def sample_pressure_field(polygon, field, element_index, normal):
-    if len(polygon) < 3:
-        return
-
-    triangles, vertices = triangulate_polygon(polygon, normal)
-
-    pressures = []
-    for vertex in vertices[:-1]:
-        pressures.append(field.value_at_cartesian_point(element_index, vertex))
-
-    bc = vertices[-1]
-    bn = vertices[0]
-    gradient_at_element = field.gradient_at_element(element_index)
-    pressures.append(gradient_at_element.dot(bc - bn) + pressures[0])
-
-    return triangles, vertices, pressures
 
 
 def main():
@@ -106,7 +91,7 @@ def main():
 
     # Plot the pressure gradient
     intersection_triangles, intersection_vertices, intersection_pressures = (
-        sample_pressure_field(
+        sample_pressure_field_on_polygon(
             intersection_polygon, mesh_field, 0, triangle_mesh.face_normals[0]
         )
     )

@@ -6,6 +6,7 @@ import jax.numpy as jnp
 import jaxlie
 from jaxtyping import Array, Float, Int
 
+from jax_hydroelastic.linear_mesh_field import LinearMeshField
 from jax_hydroelastic.triangle_mesh import TriangleMesh
 from jax_hydroelastic.volume_mesh import VolumeMesh
 
@@ -170,9 +171,32 @@ def triangulate_polygon(
     return triangles, vertices
 
 
+def sample_pressure_field_on_polygon(
+    polygon: List[Float[Array, "3"]],
+    field: LinearMeshField,
+    tetrahedron_index: int | Int[Array, ""],
+    normal: Float[Array, "3"],
+) -> Tuple[
+    List[Int[Array, "3"]],
+    List[Float[Array, "3"]],
+    List[Float[Array, ""]],
+]:
+    triangles, vertices = triangulate_polygon(polygon, normal)
+
+    pressures = []
+    for vertex in vertices[:-1]:
+        pressures.append(field.value_at_cartesian_point(tetrahedron_index, vertex))
+
+    v_centroid, v0 = vertices[-1], vertices[0]
+    gradient_at_element = field.gradient_at_element(tetrahedron_index)
+    pressures.append(gradient_at_element.dot(v_centroid - v0) + pressures[0])
+
+    return triangles, vertices, pressures
+
+
 def sample_volume_field_on_surface(
     triangle_mesh: TriangleMesh,
-    tetrahedral_mesh: VolumeMesh,
+    field: LinearMeshField,
     triangle_mesh_pose: jaxlie.SE3,
     tetrahedral_mesh_pose: jaxlie.SE3,
 ) -> None:
@@ -181,17 +205,24 @@ def sample_volume_field_on_surface(
     )
 
     polygons = []
-    for tetrahedron_index in range(tetrahedral_mesh.num_elements()):
+    for tetrahedron_index in range(field.mesh.num_elements()):
         for triangle_index in range(triangle_mesh.num_elements()):
             intersection_polygon = clip_triangle_by_tetrahedron(
                 triangle_mesh,
-                tetrahedral_mesh,
+                field.mesh,
                 triangle_index,
                 tetrahedron_index,
                 triangle_mesh_to_tetrahedral_mesh,
             )
 
             if len(intersection_polygon) >= 3:
+                triangles, vertices, pressures = sample_pressure_field_on_polygon(
+                    intersection_polygon,
+                    field,
+                    tetrahedron_index,
+                    triangle_mesh.face_normals[triangle_index],
+                )
+
                 polygons.append(intersection_polygon)
 
 

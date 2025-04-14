@@ -11,9 +11,17 @@ from jax_hydroelastic.mesh import Mesh
 @chex.dataclass
 class LinearMeshField:
     mesh: Mesh
+    # Values e(vₖ) of the linear field at the vertices of the mesh
+    # e(x⃗) = Σ λₖ(x⃗)⋅e(vₖ) = ∇e⋅x⃗ + c
     values: Float[Array, "num_vertices"]
+    # Gradients ∇e of the linear field at the elements of the mesh
+    # ∇e(x⃗) = Σ ∇λₖ(x⃗)⋅e(vₖ)
     gradients: Float[Array, "num_elements 3"]
-    values_at_origin: Float[Array, "num_elements"]
+    # Affine constants c for each element of the mesh for easily computing
+    # field values
+    # e(v₀) = ∇e⋅v₀ + c
+    # c = e(v₀) - ∇e(v₀)⋅v₀
+    constants: Float[Array, "num_elements"]
 
     @classmethod
     def create(
@@ -27,14 +35,14 @@ class LinearMeshField:
                 mesh, values, jnp.arange(mesh.num_elements())
             )
 
-        values_at_origin = jax.vmap(
-            cls._compute_value_at_origin, in_axes=(None, None, None, 0)
-        )(mesh, values, gradients, jnp.arange(mesh.num_elements()))
+        constants = jax.vmap(cls._compute_constants, in_axes=(None, None, None, 0))(
+            mesh, values, gradients, jnp.arange(mesh.num_elements())
+        )
         return cls(
             mesh=mesh,
             values=values,
             gradients=gradients,
-            values_at_origin=values_at_origin,
+            constants=constants,
         )
 
     def value_at_vertex(self, vertex_index: int | Int[Array, ""]) -> jax.Array:
@@ -51,10 +59,7 @@ class LinearMeshField:
     def value_at_cartesian_point(
         self, element_index: int | Int[Array, ""], point: Float[Array, "3"]
     ) -> Float[Array, ""]:
-        return (
-            self.gradients[element_index].dot(point)
-            + self.values_at_origin[element_index]
-        )
+        return self.gradients[element_index].dot(point) + self.constants[element_index]
 
     def gradient_at_element(
         self, element_index: int | Int[Array, ""]
@@ -62,7 +67,7 @@ class LinearMeshField:
         return self.gradients[element_index]
 
     @staticmethod
-    def _compute_value_at_origin(
+    def _compute_constants(
         mesh: Mesh,
         values: Float[Array, "num_vertices"],
         gradients: Float[Array, "num_elements 3"],
