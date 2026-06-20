@@ -16,7 +16,13 @@ dependencies = [
     "pyqt5>=5.15.11",
     "pyvista>=0.44.2",
     "tetgen>=0.6.5",
+    "warp-lang>=1.14.0",
 ]
 
 [tool.ruff.lint]
 ignore = ["F722"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
