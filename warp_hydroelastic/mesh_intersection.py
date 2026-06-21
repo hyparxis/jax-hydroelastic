@@ -45,6 +45,82 @@ class ContactSurfaceData:
 
 
 @dataclass(frozen=True)
+class TetrahedronBvh:
+    mesh: VolumeMesh
+    lowers: wp.array
+    uppers: wp.array
+    bvh: wp.Bvh
+
+    @classmethod
+    def create(
+        cls,
+        mesh: VolumeMesh,
+        padding: float = 0.0,
+        constructor: str | None = None,
+        leaf_size: int = 1,
+    ) -> "TetrahedronBvh":
+        lowers = wp.empty(mesh.num_elements(), dtype=wp.vec3, device=mesh.device)
+        uppers = wp.empty(mesh.num_elements(), dtype=wp.vec3, device=mesh.device)
+
+        wp.launch(
+            _compute_tetrahedron_aabb_kernel,
+            dim=mesh.num_elements(),
+            inputs=[mesh.data(), float(padding), lowers, uppers],
+            device=mesh.device,
+        )
+
+        return cls(
+            mesh=mesh,
+            lowers=lowers,
+            uppers=uppers,
+            bvh=wp.Bvh(
+                lowers,
+                uppers,
+                constructor=constructor,
+                leaf_size=leaf_size,
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class TriangleBvh:
+    mesh: TriangleMesh
+    lowers: wp.array
+    uppers: wp.array
+    bvh: wp.Bvh
+
+    @classmethod
+    def create(
+        cls,
+        mesh: TriangleMesh,
+        padding: float = 0.0,
+        constructor: str | None = None,
+        leaf_size: int = 1,
+    ) -> "TriangleBvh":
+        lowers = wp.empty(mesh.num_elements(), dtype=wp.vec3, device=mesh.device)
+        uppers = wp.empty(mesh.num_elements(), dtype=wp.vec3, device=mesh.device)
+
+        wp.launch(
+            _compute_triangle_aabb_kernel,
+            dim=mesh.num_elements(),
+            inputs=[mesh.data(), float(padding), lowers, uppers],
+            device=mesh.device,
+        )
+
+        return cls(
+            mesh=mesh,
+            lowers=lowers,
+            uppers=uppers,
+            bvh=wp.Bvh(
+                lowers,
+                uppers,
+                constructor=constructor,
+                leaf_size=leaf_size,
+            ),
+        )
+
+
+@dataclass(frozen=True)
 class FixedPolygon:
     vertices: wp.array
     size: wp.array
@@ -123,6 +199,69 @@ def intersect_line_with_plane(p_a: wp.vec3, p_b: wp.vec3, h: PlaneData) -> wp.ve
     wa = b / (b - a)
     wb = 1.0 - wa
     return wa * p_a + wb * p_b
+
+
+@wp.func
+def _vec3_min(a: wp.vec3, b: wp.vec3) -> wp.vec3:
+    return wp.vec3(
+        wp.min(a[0], b[0]),
+        wp.min(a[1], b[1]),
+        wp.min(a[2], b[2]),
+    )
+
+
+@wp.func
+def _vec3_max(a: wp.vec3, b: wp.vec3) -> wp.vec3:
+    return wp.vec3(
+        wp.max(a[0], b[0]),
+        wp.max(a[1], b[1]),
+        wp.max(a[2], b[2]),
+    )
+
+
+@wp.kernel
+def _compute_tetrahedron_aabb_kernel(
+    mesh: VolumeMeshData,
+    padding: float,
+    lowers: wp.array(dtype=wp.vec3),
+    uppers: wp.array(dtype=wp.vec3),
+):
+    tetrahedron_index = wp.tid()
+    tetrahedron = mesh.elements[tetrahedron_index]
+
+    lower = mesh.vertices[tetrahedron[0]]
+    upper = lower
+
+    for i in range(1, 4):
+        vertex = mesh.vertices[tetrahedron[i]]
+        lower = _vec3_min(lower, vertex)
+        upper = _vec3_max(upper, vertex)
+
+    padding_vector = wp.vec3(padding, padding, padding)
+    lowers[tetrahedron_index] = lower - padding_vector
+    uppers[tetrahedron_index] = upper + padding_vector
+
+
+@wp.kernel
+def _compute_triangle_aabb_kernel(
+    mesh: TriangleMeshData,
+    padding: float,
+    lowers: wp.array(dtype=wp.vec3),
+    uppers: wp.array(dtype=wp.vec3),
+):
+    triangle_index = wp.tid()
+    triangle = mesh.elements[triangle_index]
+
+    p0 = mesh.vertices[triangle[0]]
+    p1 = mesh.vertices[triangle[1]]
+    p2 = mesh.vertices[triangle[2]]
+
+    lower = _vec3_min(_vec3_min(p0, p1), p2)
+    upper = _vec3_max(_vec3_max(p0, p1), p2)
+
+    padding_vector = wp.vec3(padding, padding, padding)
+    lowers[triangle_index] = lower - padding_vector
+    uppers[triangle_index] = upper + padding_vector
 
 
 @wp.func
@@ -480,8 +619,218 @@ def _sample_volume_field_on_surface_kernel(
     contact_surface.surface_sizes[tetrahedron_index, triangle_index] = surface_size
 
 
+@wp.kernel
+def _sample_volume_field_on_surface_bvh_kernel(
+    triangle_mesh: TriangleMeshData,
+    field: LinearMeshFieldData,
+    tetrahedron_bvh_id: wp.uint64,
+    triangle_frame_to_tetrahedron_frame: wp.transform,
+    contact_surface: ContactSurfaceData,
+):
+    triangle_index = wp.tid()
+    triangle = triangle_mesh.elements[triangle_index]
+
+    p0 = wp.transform_point(
+        triangle_frame_to_tetrahedron_frame, triangle_mesh.vertices[triangle[0]]
+    )
+    p1 = wp.transform_point(
+        triangle_frame_to_tetrahedron_frame, triangle_mesh.vertices[triangle[1]]
+    )
+    p2 = wp.transform_point(
+        triangle_frame_to_tetrahedron_frame, triangle_mesh.vertices[triangle[2]]
+    )
+
+    query_lower = _vec3_min(_vec3_min(p0, p1), p2)
+    query_upper = _vec3_max(_vec3_max(p0, p1), p2)
+
+    query = wp.bvh_query_aabb(tetrahedron_bvh_id, query_lower, query_upper, -1)
+    tetrahedron_index = int(0)
+
+    while wp.bvh_query_next(query, tetrahedron_index, 1.0e10):
+        polygon = wp.zeros(shape=MAX_POLYGON_VERTICES, dtype=wp.vec3)
+        polygon_size = _clip_triangle_by_tetrahedron(
+            triangle_mesh,
+            field.mesh,
+            triangle_index,
+            tetrahedron_index,
+            triangle_frame_to_tetrahedron_frame,
+            polygon,
+        )
+
+        contact_surface.polygon_sizes[tetrahedron_index, triangle_index] = polygon_size
+        for i in range(MAX_POLYGON_VERTICES):
+            contact_surface.polygon_vertices[tetrahedron_index, triangle_index, i] = (
+                polygon[i]
+            )
+
+        surface_size = int(0)
+        if polygon_size >= 3:
+            normal = wp.transform_vector(
+                triangle_frame_to_tetrahedron_frame,
+                triangle_mesh.face_normals[triangle_index],
+            )
+            norm = wp.length(normal)
+            if norm > 1.0e-14:
+                normal = normal / norm
+
+            triangles = wp.zeros(shape=MAX_CONTACT_TRIANGLES, dtype=wp.vec3i)
+            vertices = wp.zeros(shape=MAX_CONTACT_VERTICES, dtype=wp.vec3)
+            pressures = wp.zeros(shape=MAX_CONTACT_VERTICES, dtype=float)
+
+            surface_size = _sample_pressure_field_on_polygon(
+                polygon,
+                polygon_size,
+                field,
+                tetrahedron_index,
+                normal,
+                triangles,
+                vertices,
+                pressures,
+            )
+
+            for i in range(MAX_CONTACT_TRIANGLES):
+                contact_surface.surface_triangles[
+                    tetrahedron_index, triangle_index, i
+                ] = triangles[i]
+            for i in range(MAX_CONTACT_VERTICES):
+                contact_surface.surface_vertices[
+                    tetrahedron_index, triangle_index, i
+                ] = vertices[i]
+                contact_surface.surface_pressures[
+                    tetrahedron_index, triangle_index, i
+                ] = pressures[i]
+
+        contact_surface.surface_sizes[tetrahedron_index, triangle_index] = surface_size
+
+
+@wp.kernel
+def _sample_volume_field_on_surface_triangle_bvh_kernel(
+    triangle_mesh: TriangleMeshData,
+    field: LinearMeshFieldData,
+    triangle_bvh_id: wp.uint64,
+    triangle_frame_to_tetrahedron_frame: wp.transform,
+    tetrahedron_frame_to_triangle_frame: wp.transform,
+    contact_surface: ContactSurfaceData,
+):
+    tetrahedron_index = wp.tid()
+    tetrahedron = field.mesh.elements[tetrahedron_index]
+
+    p0 = wp.transform_point(
+        tetrahedron_frame_to_triangle_frame,
+        field.mesh.vertices[tetrahedron[0]],
+    )
+    p1 = wp.transform_point(
+        tetrahedron_frame_to_triangle_frame,
+        field.mesh.vertices[tetrahedron[1]],
+    )
+    p2 = wp.transform_point(
+        tetrahedron_frame_to_triangle_frame,
+        field.mesh.vertices[tetrahedron[2]],
+    )
+    p3 = wp.transform_point(
+        tetrahedron_frame_to_triangle_frame,
+        field.mesh.vertices[tetrahedron[3]],
+    )
+
+    query_lower = _vec3_min(_vec3_min(p0, p1), _vec3_min(p2, p3))
+    query_upper = _vec3_max(_vec3_max(p0, p1), _vec3_max(p2, p3))
+
+    query = wp.bvh_query_aabb(triangle_bvh_id, query_lower, query_upper, -1)
+    triangle_index = int(0)
+
+    while wp.bvh_query_next(query, triangle_index, 1.0e10):
+        polygon = wp.zeros(shape=MAX_POLYGON_VERTICES, dtype=wp.vec3)
+        polygon_size = _clip_triangle_by_tetrahedron(
+            triangle_mesh,
+            field.mesh,
+            triangle_index,
+            tetrahedron_index,
+            triangle_frame_to_tetrahedron_frame,
+            polygon,
+        )
+
+        contact_surface.polygon_sizes[tetrahedron_index, triangle_index] = polygon_size
+        for i in range(MAX_POLYGON_VERTICES):
+            contact_surface.polygon_vertices[tetrahedron_index, triangle_index, i] = (
+                polygon[i]
+            )
+
+        surface_size = int(0)
+        if polygon_size >= 3:
+            normal = wp.transform_vector(
+                triangle_frame_to_tetrahedron_frame,
+                triangle_mesh.face_normals[triangle_index],
+            )
+            norm = wp.length(normal)
+            if norm > 1.0e-14:
+                normal = normal / norm
+
+            triangles = wp.zeros(shape=MAX_CONTACT_TRIANGLES, dtype=wp.vec3i)
+            vertices = wp.zeros(shape=MAX_CONTACT_VERTICES, dtype=wp.vec3)
+            pressures = wp.zeros(shape=MAX_CONTACT_VERTICES, dtype=float)
+
+            surface_size = _sample_pressure_field_on_polygon(
+                polygon,
+                polygon_size,
+                field,
+                tetrahedron_index,
+                normal,
+                triangles,
+                vertices,
+                pressures,
+            )
+
+            for i in range(MAX_CONTACT_TRIANGLES):
+                contact_surface.surface_triangles[
+                    tetrahedron_index, triangle_index, i
+                ] = triangles[i]
+            for i in range(MAX_CONTACT_VERTICES):
+                contact_surface.surface_vertices[
+                    tetrahedron_index, triangle_index, i
+                ] = vertices[i]
+                contact_surface.surface_pressures[
+                    tetrahedron_index, triangle_index, i
+                ] = pressures[i]
+
+        contact_surface.surface_sizes[tetrahedron_index, triangle_index] = surface_size
+
+
 def _identity_transform() -> wp.transform:
     return wp.transform_identity()
+
+
+def _allocate_contact_surface(shape: tuple[int, int], device: str) -> ContactSurface:
+    polygon_vertices = wp.zeros(
+        shape=shape + (MAX_POLYGON_VERTICES,),
+        dtype=wp.vec3,
+        device=device,
+    )
+    polygon_sizes = wp.zeros(shape=shape, dtype=int, device=device)
+    surface_triangles = wp.zeros(
+        shape=shape + (MAX_CONTACT_TRIANGLES,),
+        dtype=wp.vec3i,
+        device=device,
+    )
+    surface_vertices = wp.zeros(
+        shape=shape + (MAX_CONTACT_VERTICES,),
+        dtype=wp.vec3,
+        device=device,
+    )
+    surface_pressures = wp.zeros(
+        shape=shape + (MAX_CONTACT_VERTICES,),
+        dtype=float,
+        device=device,
+    )
+    surface_sizes = wp.zeros(shape=shape, dtype=int, device=device)
+
+    return ContactSurface(
+        polygon_vertices=polygon_vertices,
+        polygon_sizes=polygon_sizes,
+        surface_triangles=surface_triangles,
+        surface_vertices=surface_vertices,
+        surface_pressures=surface_pressures,
+        surface_sizes=surface_sizes,
+    )
 
 
 def clip_triangle_by_tetrahedron(
@@ -575,37 +924,7 @@ def sample_volume_field_on_surface(
     )
 
     shape = (field.mesh.num_elements(), triangle_mesh.num_elements())
-
-    polygon_vertices = wp.zeros(
-        shape=shape + (MAX_POLYGON_VERTICES,),
-        dtype=wp.vec3,
-        device=field.mesh.device,
-    )
-    polygon_sizes = wp.zeros(shape=shape, dtype=int, device=field.mesh.device)
-    surface_triangles = wp.zeros(
-        shape=shape + (MAX_CONTACT_TRIANGLES,),
-        dtype=wp.vec3i,
-        device=field.mesh.device,
-    )
-    surface_vertices = wp.zeros(
-        shape=shape + (MAX_CONTACT_VERTICES,),
-        dtype=wp.vec3,
-        device=field.mesh.device,
-    )
-    surface_pressures = wp.zeros(
-        shape=shape + (MAX_CONTACT_VERTICES,),
-        dtype=float,
-        device=field.mesh.device,
-    )
-    surface_sizes = wp.zeros(shape=shape, dtype=int, device=field.mesh.device)
-    contact_surface = ContactSurface(
-        polygon_vertices=polygon_vertices,
-        polygon_sizes=polygon_sizes,
-        surface_triangles=surface_triangles,
-        surface_vertices=surface_vertices,
-        surface_pressures=surface_pressures,
-        surface_sizes=surface_sizes,
-    )
+    contact_surface = _allocate_contact_surface(shape, field.mesh.device)
 
     wp.launch(
         _sample_volume_field_on_surface_kernel,
@@ -614,6 +933,104 @@ def sample_volume_field_on_surface(
             triangle_mesh.data(),
             field.data(),
             triangle_mesh_to_tetrahedral_mesh,
+            contact_surface.data(),
+        ],
+        device=field.mesh.device,
+    )
+
+    return contact_surface
+
+
+def sample_volume_field_on_surface_bvh(
+    triangle_mesh: TriangleMesh,
+    field: LinearMeshField,
+    triangle_mesh_pose: wp.transform | None = None,
+    tetrahedral_mesh_pose: wp.transform | None = None,
+    tetrahedron_bvh: TetrahedronBvh | None = None,
+) -> ContactSurface:
+    if triangle_mesh.device != field.mesh.device:
+        raise ValueError("triangle_mesh and field.mesh must be on the same device")
+
+    if tetrahedron_bvh is None:
+        tetrahedron_bvh = TetrahedronBvh.create(field.mesh)
+    elif tetrahedron_bvh.mesh is not field.mesh:
+        if (
+            tetrahedron_bvh.mesh.elements.ptr != field.mesh.elements.ptr
+            or tetrahedron_bvh.mesh.vertices.ptr != field.mesh.vertices.ptr
+        ):
+            raise ValueError("tetrahedron_bvh must have been built from field.mesh")
+
+    if triangle_mesh_pose is None:
+        triangle_mesh_pose = _identity_transform()
+    if tetrahedral_mesh_pose is None:
+        tetrahedral_mesh_pose = _identity_transform()
+
+    triangle_mesh_to_tetrahedral_mesh = wp.transform_multiply(
+        wp.transform_inverse(tetrahedral_mesh_pose), triangle_mesh_pose
+    )
+
+    shape = (field.mesh.num_elements(), triangle_mesh.num_elements())
+    contact_surface = _allocate_contact_surface(shape, field.mesh.device)
+
+    wp.launch(
+        _sample_volume_field_on_surface_bvh_kernel,
+        dim=triangle_mesh.num_elements(),
+        inputs=[
+            triangle_mesh.data(),
+            field.data(),
+            tetrahedron_bvh.bvh.id,
+            triangle_mesh_to_tetrahedral_mesh,
+            contact_surface.data(),
+        ],
+        device=field.mesh.device,
+    )
+
+    return contact_surface
+
+
+def sample_volume_field_on_surface_triangle_bvh(
+    triangle_mesh: TriangleMesh,
+    field: LinearMeshField,
+    triangle_mesh_pose: wp.transform | None = None,
+    tetrahedral_mesh_pose: wp.transform | None = None,
+    triangle_bvh: TriangleBvh | None = None,
+) -> ContactSurface:
+    if triangle_mesh.device != field.mesh.device:
+        raise ValueError("triangle_mesh and field.mesh must be on the same device")
+
+    if triangle_bvh is None:
+        triangle_bvh = TriangleBvh.create(triangle_mesh)
+    elif triangle_bvh.mesh is not triangle_mesh:
+        if (
+            triangle_bvh.mesh.elements.ptr != triangle_mesh.elements.ptr
+            or triangle_bvh.mesh.vertices.ptr != triangle_mesh.vertices.ptr
+        ):
+            raise ValueError("triangle_bvh must have been built from triangle_mesh")
+
+    if triangle_mesh_pose is None:
+        triangle_mesh_pose = _identity_transform()
+    if tetrahedral_mesh_pose is None:
+        tetrahedral_mesh_pose = _identity_transform()
+
+    triangle_mesh_to_tetrahedral_mesh = wp.transform_multiply(
+        wp.transform_inverse(tetrahedral_mesh_pose), triangle_mesh_pose
+    )
+    tetrahedral_mesh_to_triangle_mesh = wp.transform_inverse(
+        triangle_mesh_to_tetrahedral_mesh
+    )
+
+    shape = (field.mesh.num_elements(), triangle_mesh.num_elements())
+    contact_surface = _allocate_contact_surface(shape, field.mesh.device)
+
+    wp.launch(
+        _sample_volume_field_on_surface_triangle_bvh_kernel,
+        dim=field.mesh.num_elements(),
+        inputs=[
+            triangle_mesh.data(),
+            field.data(),
+            triangle_bvh.bvh.id,
+            triangle_mesh_to_tetrahedral_mesh,
+            tetrahedral_mesh_to_triangle_mesh,
             contact_surface.data(),
         ],
         device=field.mesh.device,
